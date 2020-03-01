@@ -11,16 +11,9 @@
 (def grid-size-y (* (/ W H) grid-size-x)) ;; number of cells high
 ;(def prop-area 0.941)  ;; how much of the cell does the box fill?
 ;(def inner-lvls 13)
-(def prop-area 0.34)  ;; how much of the cell does the box fill?
+(def prop-area 0.734)  ;; how much of the cell does the box fill?
 (def inner-lvls 3)
-
-(comment
-  (def x1 [0 1 2 3 4])
-  (def x2 [0 1 2 3 4])
-  (def xy (for [x x1 y x2] (vector x y)))  ;; cartesian product
-  (map (partial * 300) [0 1])
-  )
-
+(def fill-chance 0.92)  ;;prob the inner-sqaure stays unfilled (bad name - fix)
 
 (defn flat-idx [idx]
   (let [[x y] idx]
@@ -69,15 +62,14 @@
         cell-height (/ H grid-size-y)]
     (mx/mul idx [cell-width cell-height])))
 
- (defn draw-rect
+(defn draw-rect
       "translate then draw rect"
       [origin size]
       (let [[x y] origin]
         (q/with-translation [x y]
           (q/rect 0 0 size size)))
-             ;(q/fill 306 50 10 0.8)
-             ;(q/rect 0 0 rect-width rect-height)))  
-      )
+             #_(q/fill 306 50 10 0.8))
+
 (defn inner-orig-adj
   "how much inside the cell should the inner square origin be?"
   [size prop]
@@ -124,13 +116,6 @@
     (println grid idx pos))
   )
 
-(defn foo
-  ([a]
-   (foo a nil))
-  ([a b]
-   (println "Required argument a is" a)
-   (println "Optional argument b is" b)))
-
 ;;TODO - probably either both w/h and rand should be outside or inside
 ;; inner fn. Weird that one is out, one is in
 (defn shape-maker 
@@ -156,14 +141,15 @@
         :mid-l (midpoint tl bl)
         :lvl lvl}))))
 
-
 (defn make-inner-shapes 
   "return the shapes for all inner shapes based on levels"
   [grid-cells-x grid-cells-y num-lvls shrink-prop]
   (let [g (make-grid grid-cells-x grid-cells-y)
         cell-width (/ W grid-size-x)
         cell-height (/ H grid-size-y)
-        adj (into [] (map #(apply * (vec (repeat %1 shrink-prop))) (map inc (range num-lvls))))
+        r (map inc (range num-lvls))
+        ;; r (range (num-lvls))
+        adj (into [] (map #(apply * (vec (repeat %1 shrink-prop))) r))
         shps (for [a adj]
           (let [w (* cell-width a)
                 h (* cell-height a)
@@ -201,10 +187,8 @@
 (defn draw-shp 
   "takes shape map and draws the vertices"
   [shp]
-  (let [[x0 y0] (:tl shp)
-        [x1 y1] (:tr shp)
-        [x2 y2] (:br shp)
-        [x3 y3] (:bl shp)]
+  (let [[x0 y0] (:tl shp) [x1 y1] (:tr shp)
+        [x2 y2] (:br shp) [x3 y3] (:bl shp)]
     ;;(println "V: " x0 y0 x1 y1 x2 y2 x3 y3)
     (q/begin-shape)
     (q/vertex x0 y0)
@@ -217,7 +201,6 @@
     ;; (q/do-record (q/create-graphics 1400 1400 :pdf "con_squares.pdf")
                        ;; (draw-state))
                        ;; (q/exit))
-
 
  (defn setup []
     (q/frame-rate 3)
@@ -306,19 +289,20 @@
 
 (comment
   (map #(mod (+ %1 0.6) 360) (range 0 380 10))
-  (map  #((shape-maker 0 0) %1 15 15) 
+;;(map  #((shape-maker 0 0) %1 15 15) 
         [[0 0] [100 0] [0 200]])
-  )
+ 
 
   (defn draw-state [state]
     ;;(q/no-loop)
     ;;(q/print-first-n 1 (last (:origins-inner state)))
-   ;;(println (:inners state))
+    ;;(println (:inners state))
 
     (q/no-stroke)
     (q/frame-rate 2)
     ;;(q/background (:color state) 100 100 0.3)
     (q/fill (:color state) 100 100)
+ 
     ;;outer squares
     (doseq [o (:origins state)]
       (let [w (:cell-width state)
@@ -329,58 +313,60 @@
 
     ;;(println "Count: " (count (:inners state)))
 
-;; very wide strokes
-;; alpha increasing with lvl
-;; alternating cols by lvl
+    ;; very wide strokes
+    ;; alpha increasing with lvl
+    ;; alternating cols by lvl
 
     ;;inner squares
     (doseq [s (:inners state)]
-      (if (> (rand) 0.9) ;; outline only if no fill chance
+      (if (> (rand) fill-chance) ;; outline only if no fill chance
         (do
           (q/fill (:color2 state) 100 100 0.55)
           (q/no-stroke))
         (do
-          (q/stroke (* (:lvl s) (:color2 state)) 100 100 0.75)
-          (q/no-fill)))
-      ;;(q/fill (mod (+ (:color2 state) (.indexOf (:origins state) s)) 360) 100 100)
+          (let [i (/ 360 (+ 1 inner-lvls))
+                adj (* i (:lvl s))
+                h (mod (+ adj (:color2 state)) 360)]
+            (q/stroke h 100 100 0.75)
+            (q/no-fill))))
       (draw-shp s))
- 
+ ;;(q/fill (mod (+ (:color2 state) (.indexOf (:origins state) s)) 360) 100 100)
+
     ;;connectors
-                                        ;pick a side on current shape
+    ;;pick a side on current shape
     ;;find the neighbour
     ;;get the proper midpoint
-    
-    (doseq [s (:inner-shps state)]
-      (let [midpts [:mid-t :mid-r :mid-b :mid-l]
-            sides [:top :right :bottom :left]
-            idx (.indexOf (:inner-shps state) s)
-            side-idx (rand-int 4)
-            side (nth sides side-idx)
-            n-idx (find-neighbour-idx side (nth (:grid state) idx))
-            midpt-side (nth midpts side-idx)
-            midpt (get s midpt-side)
-            n-mid (nth (cycle midpts) (+ side-idx 2))
-            n-shp (if (nil? n-idx)
-                    false
-                    (nth (:inner-shps state) (flat-idx n-idx)))
-            n-midpt (if (nil? n-idx)
+    (let [shps (filter #(= (:lvl %1) 0) (:inners state))
+          midpts [:mid-t :mid-r :mid-b :mid-l]
+          sides [:top :right :bottom :left]]
+      (doseq [s shps]
+        (let [idx (.indexOf shps s)
+              side-idx (rand-int 4)
+              side (nth sides side-idx)
+              n-idx (find-neighbour-idx side (nth (:grid state) idx))
+              midpt-side (nth midpts side-idx)
+              midpt (get s midpt-side)
+              n-mid (nth (cycle midpts) (+ side-idx 2))
+              n-shp (if (nil? n-idx)
                       false
-                      (get n-shp n-mid))]
-
-        ;;(println "N: " idx midpt n-idx n-midpt)
-        (if (and (> (rand) 0.3) (not (nil? n-idx)))
-          (let [[x1 y1] midpt
-                [x2 y2] n-midpt]
-            (q/stroke (:color2 state) 100 100 0.6)
-            (q/stroke-weight 3.75)
-            ;;(q/no-fill)
-            ;;(q/ellipse x1 y1 25 25)
-            
-            ;;(q/fill 360 100 0 1)
-            ;;(q/ellipse x2 y2 25 25)
-            (q/line x1 y1 x2 y2)))))
-    #_(save_pdf))
-
+                      (nth (:inner-shps state) (flat-idx n-idx)))
+              n-midpt (if (nil? n-idx)
+                        false
+                        (get n-shp n-mid))]
+          (if (and (> (rand) 0.3) (not (nil? n-idx)))
+            (let [[x1 y1] midpt
+                  [x2 y2] n-midpt
+                  v (mx/sub midpt n-midpt)
+                  mag (mx/magnitude v)
+                  adj (* 0.12 mag)]
+              (q/stroke (:color2 state) 100 100 0.6)
+              (q/stroke-weight 3.75)
+              ;;(q/no-fill) ;;(q/ellipse x1 y1 25 25)
+              ;;(q/fill 360 100 0 1) ;;(q/ellipse x2 y2 25 25)
+              (q/line (+ x1 (- (rand adj) (/ adj 2))) 
+                      (+ y1 (- (rand adj) (/ adj 2)))
+                      (+ x2 (- (rand adj) (/ adj 2)))
+                      (+ y2 (- (rand adj) (/ adj 2))))))))))
 
 (comment
   (def midpts [:mid-t :mid-r :mid-b :mid-l])
@@ -397,13 +383,6 @@
       ;;(println (:side cell) (:cell cell))
       (println (:side cell) (:cell cell) (find-neighbour-idx (:side cell) (:cell cell)))))
   )
-(comment
-  (let [sides [:mid-t :mid-r :mid-b :mid-l]]
-    (map #(nth (cycle sides) %1) (range 0 10))
-    )
-  (find-neighbour-idx :top [0 0])
-  )
-
 
   (q/defsketch connect_squares
     :title "Connected Squares"
