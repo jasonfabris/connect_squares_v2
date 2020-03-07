@@ -4,20 +4,29 @@
             [clojure.core.matrix :as mx]
             [clojure.pprint :as pp]))
 
-
 (def W 1400)
 (def H 1400)
-(def grid-size-x 11) ;; number of cells wide
+(def grid-size-x 31) ;; number of cells wide
 (def grid-size-y (* (/ W H) grid-size-x)) ;; number of cells high
 ;(def prop-area 0.941)  ;; how much of the cell does the box fill?
-;(def inner-lvls 13)
-(def prop-area 0.734)  ;; how much of the cell does the box fill?
-(def inner-lvls 3)
-(def fill-chance 0.92)  ;;prob the inner-sqaure stays unfilled (bad name - fix)
+;(def inner-lvls 13)ss
+(def prop-area 0.19734) ;;redundant  ;; how much of the cell does the box fill?
+(def shrink-props [0.44 0.16] #_[0.9 0.34 0.22 0.3] #_[0.734 0.6 0.5 0.4 0.3])
+(def inner-lvls (count shrink-props))
+(def fill-chance 0.78)  ;;prob the inner-sqaure stays unfilled (bad name - fix)
+(def connector-factor 0.2) ;; how random the length of the connector is
+(def connector-chance 0.3) ;; how likely a shape is to have a connector
 
-(defn flat-idx [idx]
+(defn key-press [k]
+  (let [dte (str (java.time.LocalDateTime/now))
+        dir "C:/Users/Jason/OneDrive/Art_Output/"
+        fname (str dir "ConnectedSquares_v2_" dte ".png")]
+    ;; (println fname)
+    (q/save-frame fname)))
+
+(defn flat-idx [idx width]
   (let [[x y] idx]
-    (->> (* x grid-size-x)
+    (->> (* x width)
          (+ y))))
 
 (defn midpoint [p1 p2]
@@ -149,7 +158,8 @@
         cell-height (/ H grid-size-y)
         r (map inc (range num-lvls))
         ;; r (range (num-lvls))
-        adj (into [] (map #(apply * (vec (repeat %1 shrink-prop))) r))
+        ;; adj (into [] (map #(apply * (vec (repeat %1 shrink-prop))) r))
+        adj shrink-props
         shps (for [a adj]
           (let [w (* cell-width a)
                 h (* cell-height a)
@@ -197,12 +207,7 @@
     (q/vertex x3 y3)
     (q/end-shape :close)))
 
-;; (defn save_pdf []
-    ;; (q/do-record (q/create-graphics 1400 1400 :pdf "con_squares.pdf")
-                       ;; (draw-state))
-                       ;; (q/exit))
-
- (defn setup []
+(defn setup []
     (q/frame-rate 3)
     (q/color-mode :hsb 360 100 100 1)
     
@@ -222,9 +227,10 @@
                               (/ height-inner 4)])
           grid (make-grid grid-size-x grid-size-y)
           xy (for [x (range grid-size-x)
-                   y (range grid-size-y)] (vector x y))]
-    {:color 0
-     :color2 180
+                   y (range grid-size-y)] (vector x y))
+          init-col (rand 360)]
+    {:color init-col 
+     :color2 (+ 180 init-col)
      :grid grid
      :origins (map cell-idx-to-xy grid)
      :origins-inner (mx/add (map cell-idx-to-xy grid) adj)
@@ -246,15 +252,6 @@
                                                    height-inner2)
                        (mx/add (map cell-idx-to-xy grid) adj2))
      :inners (make-inner-shapes grid-size-x grid-size-y inner-lvls prop-area)}))
-
-(comment
-  (for [n (range inner-lvls)]
-    (doseq [o (:origins state)]
-      (let [w (:cell-width state)
-            h (:cell-height state)
-            s ((:new-shp-grid state) o w h)
-            p (apply * (vec  (repeat n 0.9)))
-            adj (inner-orig-adj )]))))
 
   (defn update-state [state]
      (let [x-wob (scale-value (rand) [0 1]
@@ -287,27 +284,22 @@
                            (:origins-inner2 state))
         :inners (make-inner-shapes grid-size-x grid-size-y inner-lvls prop-area)}))
 
-(comment
-  (map #(mod (+ %1 0.6) 360) (range 0 380 10))
-;;(map  #((shape-maker 0 0) %1 15 15) 
-        [[0 0] [100 0] [0 200]])
- 
 
   (defn draw-state [state]
     ;;(q/no-loop)
     ;;(q/print-first-n 1 (last (:origins-inner state)))
     ;;(println (:inners state))
-
-    (q/no-stroke)
+        
     (q/frame-rate 2)
     ;;(q/background (:color state) 100 100 0.3)
-    (q/fill (:color state) 100 100)
- 
+     
     ;;outer squares
     (doseq [o (:origins state)]
       (let [w (:cell-width state)
             h (:cell-height state)
             s ((:new-shp-grid state) o w h)]
+        (q/no-stroke)
+        (q/fill (:color state) 100 100 1.0)
         ;;(q/fill (mod (+ (:color state) (.indexOf (:origins state) o)) 360) 100 100)
         (draw-shp s)))
 
@@ -321,16 +313,17 @@
     (doseq [s (:inners state)]
       (if (> (rand) fill-chance) ;; outline only if no fill chance
         (do
-          (q/fill (:color2 state) 100 100 0.55)
-          (q/no-stroke))
+          (q/fill (:color2 state) 100 100 0.75)
+          #_(q/no-stroke))
         (do
           (let [i (/ 360 (+ 1 inner-lvls))
-                adj (* i (:lvl s))
+                adj (+ 30 (* i (:lvl s)))
                 h (mod (+ adj (:color2 state)) 360)]
-            (q/stroke h 100 100 0.75)
+            (q/stroke-weight 2)
+            (q/stroke h 100 100 0.75) ;; alpha 0.75
             (q/no-fill))))
       (draw-shp s))
- ;;(q/fill (mod (+ (:color2 state) (.indexOf (:origins state) s)) 360) 100 100)
+    ;;(q/fill (mod (+ (:color2 state) (.indexOf (:origins state) s)) 360) 100 100)
 
     ;;connectors
     ;;pick a side on current shape
@@ -349,18 +342,19 @@
               n-mid (nth (cycle midpts) (+ side-idx 2))
               n-shp (if (nil? n-idx)
                       false
-                      (nth (:inner-shps state) (flat-idx n-idx)))
+                      (nth shps #_(:inners state) (flat-idx n-idx grid-size-x)))
               n-midpt (if (nil? n-idx)
                         false
                         (get n-shp n-mid))]
-          (if (and (> (rand) 0.3) (not (nil? n-idx)))
+          #_(println (count shps) (count (:grid state)))
+          (if (and (< (rand) connector-chance) (not (nil? n-idx)))
             (let [[x1 y1] midpt
                   [x2 y2] n-midpt
                   v (mx/sub midpt n-midpt)
                   mag (mx/magnitude v)
-                  adj (* 0.12 mag)]
-              (q/stroke (:color2 state) 100 100 0.6)
+                  adj (* connector-factor mag)]
               (q/stroke-weight 3.75)
+              (q/stroke (:color2 state) 100 100 0.6) ;; alpha 0.6
               ;;(q/no-fill) ;;(q/ellipse x1 y1 25 25)
               ;;(q/fill 360 100 0 1) ;;(q/ellipse x2 y2 25 25)
               (q/line (+ x1 (- (rand adj) (/ adj 2))) 
@@ -387,16 +381,22 @@
   (q/defsketch connect_squares
     :title "Connected Squares"
     :size [W H]
-  ; setup function called only once, during sketch initialization.
     :setup setup
-  ; update-state is called on each iteration before draw-state.
     :update update-state
     :draw draw-state 
+    :mouse-clicked (fn [state _]
+                     (let [dt (.format (java.text.SimpleDateFormat. "yyyy-MM-dd-hhmmss") 
+                                       (new java.util.Date))
+                           nm (str "C:/Users/Jason/OneDrive/Art_Output/" "connected_squares_" dt)]
+                       (q/save (str nm ".png"))
+                       (q/do-record (q/create-graphics W H :pdf (str nm ".pdf"))
+                                    (q/color-mode :hsb 360 100 100 1)
+                                    (draw-state state))
+                       state))
     :features [:keep-on-top]
-  ; This sketch uses functional-mode middleware.
-  ; Check quil wiki for more info about middlewares and particularly
-  ; fun-mode.
     :middleware [m/fun-mode])
 
 ;;(defn -main [& args])
+
+
 
