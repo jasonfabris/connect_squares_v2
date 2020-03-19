@@ -4,18 +4,20 @@
             [clojure.core.matrix :as mx]
             [clojure.pprint :as pp]))
 
-(def W 1400)
-(def H 1400)
-(def grid-size-x 31) ;; number of cells wide
-(def grid-size-y (* (/ W H) grid-size-x)) ;; number of cells high
+(def W 2000)
+(def H 1200)
+(def grid-size-x 20) ;; number of cells wide
+(def grid-size-y 12 #_(* (/ W H) grid-size-x)) ;; number of cells high
 ;(def prop-area 0.941)  ;; how much of the cell does the box fill?
 ;(def inner-lvls 13)ss
 (def prop-area 0.19734) ;;redundant  ;; how much of the cell does the box fill?
-(def shrink-props [0.44 0.16] #_[0.9 0.34 0.22 0.3] #_[0.734 0.6 0.5 0.4 0.3])
+(def shrink-props [0.7 0.38 0.12] #_[0.9 0.34 0.22 0.3] #_[0.734 0.6 0.5 0.4 0.3])
 (def inner-lvls (count shrink-props))
-(def fill-chance 0.78)  ;;prob the inner-sqaure stays unfilled (bad name - fix)
-(def connector-factor 0.2) ;; how random the length of the connector is
-(def connector-chance 0.3) ;; how likely a shape is to have a connector
+(def fill-chance 0.30)  ;;0.78 prob the inner-sqaure stays unfilled (bad name - fix)
+(def connector-factor 0.32) ;; how random the length of the connector is
+(def connector-chance 0.38) ;; how likely a shape is to have a connector
+(def connector-lvl 0) ;; the level the connectors are drawn between
+(def for-plotter false)
 
 (defn key-press [k]
   (let [dte (str (java.time.LocalDateTime/now))
@@ -24,10 +26,24 @@
     ;; (println fname)
     (q/save-frame fname)))
 
-(defn flat-idx [idx width]
+(defn flat-idx [idx rows cols]
+  (let [[x y] idx
+        m (* x (- cols 1))
+        ]
+    #_(println "X: " x " Y: " y   "M: " m " Idx: "
+             (+ m  (+ x y)))
+    (+ m  (+ x y))
+    ))
+
+(comment 
+  (def tstgrid (make-grid 2 5))
+  (map #(flat-idx %1 2 5) tstgrid)
+
+(defn flat-idx [idx rows cols]
   (let [[x y] idx]
-    (->> (* x width)
-         (+ y))))
+    (->> (* x rows)
+         (+ y x))))  
+)
 
 (defn midpoint [p1 p2]
   (let [[x1 y1] p1
@@ -66,9 +82,9 @@
 
 (defn cell-idx-to-xy 
   "grid index (x y) to scaled xy origin"
-  [idx]
-  (let [cell-width (/ W grid-size-x)
-        cell-height (/ H grid-size-y)]
+  [idx x-size y-size]
+  (let [cell-width (/ W x-size)
+        cell-height (/ H y-size)]
     (mx/mul idx [cell-width cell-height])))
 
 (defn draw-rect
@@ -143,7 +159,8 @@
            tr [(+ xo w (x-wob)) yo]
            br [(+ xo w (x-wob)) (+ yo h (y-wob))]
            bl [(+ xo) (+ yo h)]]
-       {:tl tl :tr tr :br br :bl bl
+       {:idx [-1 -1]
+        :tl tl :tr tr :br br :bl bl
         :mid-t (midpoint tl tr)
         :mid-r (midpoint tr br)
         :mid-b (midpoint bl br)
@@ -165,7 +182,7 @@
                 h (* cell-height a)
                 l (.indexOf adj a)
                 orig (->> g
-                          (map cell-idx-to-xy) 
+                          (map #(cell-idx-to-xy %1 grid-size-x grid-size-y)) 
                           (mx/add  [(inner-orig-adj cell-width a) (inner-orig-adj cell-height a)]))
                 x-wob (scale-value (rand) [0 1]
                                    [(- (/ w 5))
@@ -232,9 +249,9 @@
     {:color init-col 
      :color2 (+ 180 init-col)
      :grid grid
-     :origins (map cell-idx-to-xy grid)
-     :origins-inner (mx/add (map cell-idx-to-xy grid) adj)
-     :origins-inner2 (mx/add (map cell-idx-to-xy grid) adj2)
+     :origins (map #(cell-idx-to-xy %1 grid-size-x grid-size-y) grid)
+     :origins-inner (mx/add (map #(cell-idx-to-xy %1 grid-size-x grid-size-y) grid) adj)
+     :origins-inner2 (mx/add (map #(cell-idx-to-xy %1 grid-size-x grid-size-y) grid) adj2)
      :cell-width cell-width
      :cell-height cell-height
      :width-inner width-inner
@@ -243,14 +260,17 @@
      :height-inner2 height-inner2
      :new-shp-grid (shape-maker 0 0)
      :new-shp (shape-maker x-wob y-wob)
-     :inner-shps (map  #((shape-maker x-wob y-wob) %1
+     :inner-shps (map #((shape-maker x-wob y-wob) %1
                                                    width-inner
                                                    height-inner)
-                       (mx/add (map cell-idx-to-xy grid) adj))
-     :inner-shps2 (map  #((shape-maker x-wob y-wob) %1
-                                                   width-inner2
-                                                   height-inner2)
-                       (mx/add (map cell-idx-to-xy grid) adj2))
+                      (mx/add (map 
+                               #(cell-idx-to-xy %1 grid-size-x grid-size-y) grid) 
+                              adj))
+     :inner-shps2 (map #((shape-maker x-wob y-wob) %1
+                         width-inner2
+                         height-inner2)
+                       (mx/add (map #(cell-idx-to-xy %1 grid-size-x grid-size-y) grid) 
+                               adj2))
      :inners (make-inner-shapes grid-size-x grid-size-y inner-lvls prop-area)}))
 
   (defn update-state [state]
@@ -290,18 +310,23 @@
     ;;(q/print-first-n 1 (last (:origins-inner state)))
     ;;(println (:inners state))
         
-    (q/frame-rate 2)
+    (q/frame-rate 1)
     ;;(q/background (:color state) 100 100 0.3)
      
     ;;outer squares
-    (doseq [o (:origins state)]
-      (let [w (:cell-width state)
-            h (:cell-height state)
-            s ((:new-shp-grid state) o w h)]
-        (q/no-stroke)
-        (q/fill (:color state) 100 100 1.0)
-        ;;(q/fill (mod (+ (:color state) (.indexOf (:origins state) o)) 360) 100 100)
-        (draw-shp s)))
+    ;; if the plotter flag is set, plain white background, otherwise grid of squares
+    ;; those are currently all the same colour, but you can change that!
+    (if-not for-plotter
+      (doseq [o (:origins state)]
+        (let [w (:cell-width state)
+              h (:cell-height state)
+              s ((:new-shp-grid state) o w h)]
+          (q/no-stroke)
+          (q/fill (:color state) 100 100 1.0)
+          ;;(q/fill (mod (+ (:color state) 
+          ;; (.indexOf (:origins state) o)) 360) 100 100)
+          (draw-shp s)))
+      (q/background 200 0 100))
 
     ;;(println "Count: " (count (:inners state)))
 
@@ -314,7 +339,7 @@
       (if (> (rand) fill-chance) ;; outline only if no fill chance
         (do
           (q/fill (:color2 state) 100 100 0.75)
-          #_(q/no-stroke))
+          (q/no-stroke))
         (do
           (let [i (/ 360 (+ 1 inner-lvls))
                 adj (+ 30 (* i (:lvl s)))
@@ -325,11 +350,16 @@
       (draw-shp s))
     ;;(q/fill (mod (+ (:color2 state) (.indexOf (:origins state) s)) 360) 100 100)
 
+    (comment
+      (defn make-connectors 
+        "make connectors between shapes"
+        [shps lvl]))
+    
     ;;connectors
     ;;pick a side on current shape
     ;;find the neighbour
     ;;get the proper midpoint
-    (let [shps (filter #(= (:lvl %1) 0) (:inners state))
+    (let [shps (filter #(= (:lvl %1) connector-lvl) (:inners state))
           midpts [:mid-t :mid-r :mid-b :mid-l]
           sides [:top :right :bottom :left]]
       (doseq [s shps]
@@ -342,11 +372,15 @@
               n-mid (nth (cycle midpts) (+ side-idx 2))
               n-shp (if (nil? n-idx)
                       false
-                      (nth shps #_(:inners state) (flat-idx n-idx grid-size-x)))
+                      (do 
+                        #_(println n-idx (count shps) 
+                                 (.indexOf shps n-idx)
+                                 (flat-idx n-idx grid-size-x grid-size-y))
+                        (nth shps (flat-idx n-idx grid-size-x grid-size-y)))
+                      )
               n-midpt (if (nil? n-idx)
                         false
                         (get n-shp n-mid))]
-          #_(println (count shps) (count (:grid state)))
           (if (and (< (rand) connector-chance) (not (nil? n-idx)))
             (let [[x1 y1] midpt
                   [x2 y2] n-midpt
