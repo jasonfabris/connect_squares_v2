@@ -4,27 +4,32 @@
             [clojure.core.matrix :as mx]
             [clojure.pprint :as pp]))
 
-(def W 2000)
-(def H 1200)
-(def grid-size-x 20) ;; number of cells wide
+(def aspect-ratio 4/6)  ;; make < 1 if you have more y cells than x, > 1 otherwise
+
+(def H 1400)
+(def W (* H aspect-ratio))
+
+(def grid-size-x 8) ;; number of cells wide
 (def grid-size-y 12 #_(* (/ W H) grid-size-x)) ;; number of cells high
+
 ;(def prop-area 0.941)  ;; how much of the cell does the box fill?
 ;(def inner-lvls 13)ss
 (def prop-area 0.19734) ;;redundant  ;; how much of the cell does the box fill?
-(def shrink-props [0.7 0.38 0.12] #_[0.9 0.34 0.22 0.3] #_[0.734 0.6 0.5 0.4 0.3])
+(def shrink-props [0.92 0.7 0.65 0.22 0.12] #_[0.9 0.34 0.22 0.3] #_[0.734 0.6 0.5 0.4 0.3])
 (def inner-lvls (count shrink-props))
-(def fill-chance 0.30)  ;;0.78 prob the inner-sqaure stays unfilled (bad name - fix)
-(def connector-factor 0.32) ;; how random the length of the connector is
-(def connector-chance 0.38) ;; how likely a shape is to have a connector
-(def connector-lvl 0) ;; the level the connectors are drawn between
-(def for-plotter false)
 
-(defn key-press [k]
-  (let [dte (str (java.time.LocalDateTime/now))
-        dir "C:/Users/Jason/OneDrive/Art_Output/"
-        fname (str dir "ConnectedSquares_v2_" dte ".png")]
+(def connector-factor 0.19) ;; how random the length of the connector is
+(def connector-chance 0.79) ;; how likely a shape is to have a connector
+(def connector-lvl 1) ;; the level the connectors are drawn between
+(def for-plotter true)
+(def fill-chance 1)  ;;0.78 prob the inner-sqaure stays unfilled (bad name - fix)
+
+;; (defn key-press [k]
+  ;; (let [dte (str (java.time.LocalDateTime/now))
+        ;; dir "C:/Users/Jason/OneDrive/Art_Output/"
+        ;; fname (str dir "ConnectedSquares_v2_" dte ".png")]
     ;; (println fname)
-    (q/save-frame fname)))
+    ;; (q/save-frame fname)))
 
 (defn flat-idx [idx rows cols]
   (let [[x y] idx
@@ -167,12 +172,15 @@
         :mid-l (midpoint tl bl)
         :lvl lvl}))))
 
+;;TODO - cell-height makes rectangles if not equal to cell-width
+;;       BUT, if you force it to squares, the rows appear at the top of each background cell and look
+;;       dumb. (try 20 cols and 2 rows, for example.)
 (defn make-inner-shapes 
   "return the shapes for all inner shapes based on levels"
   [grid-cells-x grid-cells-y num-lvls shrink-prop]
   (let [g (make-grid grid-cells-x grid-cells-y)
         cell-width (/ W grid-size-x)
-        cell-height (/ H grid-size-y)
+        cell-height cell-width #_(/ H grid-size-y)
         r (map inc (range num-lvls))
         ;; r (range (num-lvls))
         ;; adj (into [] (map #(apply * (vec (repeat %1 shrink-prop))) r))
